@@ -322,42 +322,23 @@ public class ConnectionHelper {
 	public void shut() {
 	}
 
-	public void updateImage(Message<?> message, File image, String userAccount) {
-		System.out.println("ÎÒÒª »»Í·Ïñ");
-		sendImage(message, false, image, userAccount);
-	}
-
 	public void sendImage(Message<?> message) {
-		sendImage(message, true, null, null);
-	}
-
-	private void sendImage(Message<?> message, boolean isServer, File imagee, String self) {
 		@SuppressWarnings("unchecked")
 		List<String> imageList = (List<String>) message.getPayload();
 
 		InetSocketAddress remoteAddr = getConnectionAddress(message.getSender());
 		for (String userAccount : imageList) {
 			try (Socket socket = new Socket(remoteAddr.getAddress(),
-					isServer ? getTcpRecvPortFromUdpRecvPort(getUdpRecvPortFromUdpSendPort(remoteAddr.getPort()))
-							: getTcpSendPortFromUdpRecvPort(getUdpRecvPortFromUdpSendPort(remoteAddr.getPort())));) {
+					getTcpRecvPortFromUdpRecvPort(getUdpRecvPortFromUdpSendPort(remoteAddr.getPort())))) {
 
 				BufferedOutputStream out = new BufferedOutputStream(socket.getOutputStream());
 				FileOutputStream fileOut = null;
 
 				File image = new File("./src/Server/HeadImages/" + userAccount + ".jpg");
 				if (!image.isFile()) {
-					if (imagee == null)
-						image = new File("./src/Server/HeadImages/Default.jpg");
-					else
-						image = new File("./src/" + (isServer ? "Server" : "Client") + "/HeadImages/" + self + ".jpg");
-					fileOut = new FileOutputStream(image);
+					image = new File("./src/Server/HeadImages/Default.jpg");
 				}
-				BufferedInputStream in;
-				if (imagee == null)
-					in = new BufferedInputStream(new FileInputStream(image));
-				else {
-					in = new BufferedInputStream(new FileInputStream(imagee));
-				}
+				BufferedInputStream in = new BufferedInputStream(new FileInputStream(image));
 
 				byte[] buffer = new byte[1024];
 				int n = 0;
@@ -366,8 +347,6 @@ public class ConnectionHelper {
 					if (fileOut != null)
 						fileOut.write(buffer, 0, n);
 				}
-				if (fileOut != null)
-					fileOut.close();
 				in.close();
 			} catch (IOException e) {
 				e.printStackTrace();

@@ -91,8 +91,8 @@ public class Client {
 				List<String> oneList = new ArrayList<>();
 				oneList.add(self.getAccount());
 				// .∑Á≈≠¥¿±»–¥∑®
-				helper.updateImage(new Message.messageBuilder<List<String>>().Sender(ConnectionHelper.SERVER)
-						.Payload(oneList).build(), image, self.getAccount());
+//				helper.updateImage(new Message.messageBuilder<List<String>>().Sender(ConnectionHelper.SERVER)
+//						.Payload(oneList).build(), image, self.getAccount());
 			}
 			break;
 		case Message.M_IMAGE_UPDATE_SUCCEED:
