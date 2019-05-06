@@ -331,42 +331,42 @@ public class ConnectionHelper {
 		sendImage(message, true, null, null);
 	}
 
-	private void sendImage(Message<?> message, boolean isServer, File imagee,  String self) {
+	private void sendImage(Message<?> message, boolean isServer, File imagee, String self) {
 		@SuppressWarnings("unchecked")
 		List<String> imageList = (List<String>) message.getPayload();
 
 		InetSocketAddress remoteAddr = getConnectionAddress(message.getSender());
 		for (String userAccount : imageList) {
-			try (Socket socket = new Socket(remoteAddr.getAddress(),isServer?
-					getTcpRecvPortFromUdpRecvPort(getUdpRecvPortFromUdpSendPort(remoteAddr.getPort())):
-					getTcpSendPortFromUdpRecvPort(getUdpRecvPortFromUdpSendPort(remoteAddr.getPort())));) {
+			try (Socket socket = new Socket(remoteAddr.getAddress(),
+					isServer ? getTcpRecvPortFromUdpRecvPort(getUdpRecvPortFromUdpSendPort(remoteAddr.getPort()))
+							: getTcpSendPortFromUdpRecvPort(getUdpRecvPortFromUdpSendPort(remoteAddr.getPort())));) {
 
 				BufferedOutputStream out = new BufferedOutputStream(socket.getOutputStream());
 				FileOutputStream fileOut = null;
-				
-				File image  = new File("./src/Server/HeadImages/" + userAccount + ".jpg");
-				if (!image.isFile() ) {
-					if(imagee == null)
+
+				File image = new File("./src/Server/HeadImages/" + userAccount + ".jpg");
+				if (!image.isFile()) {
+					if (imagee == null)
 						image = new File("./src/Server/HeadImages/Default.jpg");
 					else
-						image = new File("./src/"+(isServer?"Server":"Client")+"/HeadImages/"+self+".jpg");
+						image = new File("./src/" + (isServer ? "Server" : "Client") + "/HeadImages/" + self + ".jpg");
 					fileOut = new FileOutputStream(image);
 				}
-			BufferedInputStream in;
-			if(imagee == null)
-				in = new BufferedInputStream(new FileInputStream(image));
-			else {
-				in = new BufferedInputStream(new FileInputStream(imagee));
-			}
+				BufferedInputStream in;
+				if (imagee == null)
+					in = new BufferedInputStream(new FileInputStream(image));
+				else {
+					in = new BufferedInputStream(new FileInputStream(imagee));
+				}
 
 				byte[] buffer = new byte[1024];
 				int n = 0;
 				while ((n = in.read(buffer)) != -1) {
 					out.write(buffer, 0, n);
-					if(fileOut != null)
+					if (fileOut != null)
 						fileOut.write(buffer, 0, n);
 				}
-				if(fileOut != null)
+				if (fileOut != null)
 					fileOut.close();
 				in.close();
 			} catch (IOException e) {
@@ -376,29 +376,29 @@ public class ConnectionHelper {
 
 	}
 
-	public void waitImageUpdate(List<String> imageList, Object user, String sender) {
-		System.out.println("等客户端 发图片");
-		waitImage(imageList, user, false, sender);
-	}
+	// public void waitImageUpdate(List<String> imageList, Object user, String
+	// sender) {
+	// System.out.println("等客户端 发图片");
+	// waitImage(imageList, user, false, sender);
+	// }
+	//
+	// public void waitImage(List<String> imageList, Object user) {
+	// waitImage(imageList, user, true, null);
+	// }
 
-	public void waitImage(List<String> imageList, Object user) {
-		waitImage(imageList, user, true, null);
-	}
-
-	private void waitImage(List<String> imageList, Object user, boolean isClient, String sender) {
+	public void waitImage(List<String> imageList, Client caller) {
 		new Thread(new Runnable() {
 
 			@Override
 			public void run() {
-				try (ServerSocket serverSocket = new ServerSocket(isClient?getPortInTCP():getPortOutTCP());) {
+				try (ServerSocket serverSocket = new ServerSocket(getPortInTCP());) {
 					for (String userAccount : imageList) {
 						Socket socket = serverSocket.accept();
 						System.out.println("获取连接");
 
 						BufferedInputStream in = new BufferedInputStream(socket.getInputStream());
 
-						File image = new File(
-								"./src/" + (isClient ? "Client" : "Server") + "/HeadImages/" + userAccount + ".jpg");
+						File image = new File("./src/Client/HeadImages/" + userAccount + ".jpg");
 						FileOutputStream out = new FileOutputStream(image);
 
 						byte[] buffer = new byte[1024];
@@ -407,16 +407,10 @@ public class ConnectionHelper {
 							out.write(buffer, 0, n);
 						}
 						out.close();
-
-						System.out.println("写入本地" + (isClient ? "Client" : "Server") + userAccount);
-
 						socket.close();
 					}
 					System.out.println("dialog END");
-					if (user.getClass() == Client.class && isClient)
-						((Client) user).updateHeadImages();
-					if (user.getClass() == ServerUI.class && !isClient)
-						((ServerUI) user).sendUpdateSucceed(sender);
+					caller.updateHeadImages();
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
@@ -430,7 +424,7 @@ public class ConnectionHelper {
 	private int getTcpRecvPortFromUdpRecvPort(int p) {
 		return p + 3;
 	}
-	
+
 	private int getTcpSendPortFromUdpRecvPort(int p) {
 		return p + 2;
 	}

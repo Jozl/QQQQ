@@ -303,11 +303,11 @@ public class ServerUI extends JFrame {
 						helper.sendImage(message);
 						break;
 
-					case Message.M_IMAGE_UPDATE:
-						helper.waitImageUpdate(message.getSender());
-						helper.sendMessageToServer(new Message.messageBuilder<>().Code(Message.M_IMAGE_REQUEST)
-								.Receiver(message.getSender()).build());
-						break;
+//					case Message.M_IMAGE_UPDATE:
+//						helper.waitImageUpdate(message.getSender());
+//						helper.sendMessageToServer(new Message.messageBuilder<>().Code(Message.M_IMAGE_REQUEST)
+//								.Receiver(message.getSender()).build());
+//						break;
 
 					case Message.M_FILE_ACCEPT:
 						// 让他们自己用tcp连，然后发
