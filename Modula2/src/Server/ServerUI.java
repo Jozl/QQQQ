@@ -304,7 +304,7 @@ public class ServerUI extends JFrame {
 						break;
 
 					case Message.M_IMAGE_UPDATE:
-						helper.waitImageUpdate(message.getSender());
+//						helper.waitImageUpdate(message.getSender());
 						helper.sendMessageToServer(new Message.messageBuilder<>().Code(Message.M_IMAGE_REQUEST)
 								.Receiver(message.getSender()).build());
 						break;

@@ -1,25 +1,14 @@
 import java.awt.BorderLayout;
 import java.awt.Image;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import java.awt.image.BufferedImage;
-import java.io.File;
 import java.io.IOException;
-import java.net.URL;
-import java.util.ArrayList;
 
 import javax.imageio.ImageIO;
 import javax.swing.ImageIcon;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
-import javax.swing.filechooser.FileFilter;
-
-import org.bouncycastle.crypto.tls.NewSessionTicket;
 
 import com.ImageChooser;
-import com.Message;
 
 public class ImgTest {
 	public static void main(String[] args) {
