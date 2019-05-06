@@ -303,11 +303,10 @@ public class ServerUI extends JFrame {
 						helper.sendImage(message);
 						break;
 
-//					case Message.M_IMAGE_UPDATE:
-//						helper.waitImageUpdate(message.getSender());
-//						helper.sendMessageToServer(new Message.messageBuilder<>().Code(Message.M_IMAGE_REQUEST)
-//								.Receiver(message.getSender()).build());
-//						break;
+					case Message.M_IMAGE_UPDATE:
+						helper.sendMessageAsServer(new Message.messageBuilder<>().Code(Message.M_IMAGE_REQUEST)
+								.Receiver(message.getSender()).build());
+						break;
 
 					case Message.M_FILE_ACCEPT:
 						// 让他们自己用tcp连，然后发
@@ -397,12 +396,13 @@ public class ServerUI extends JFrame {
 	}
 
 	public void sendUpdateSucceed(String sender) {
-		helper.sendMessageAsServer(new Message.messageBuilder<>().Code(Message.M_IMAGE_UPDATE_SUCCEED)
-				.Receiver(sender).build());
+		helper.sendMessageAsServer(
+				new Message.messageBuilder<>().Code(Message.M_IMAGE_UPDATE_SUCCEED).Receiver(sender).build());
 	}
 
-//	public void sendImageUpdateSucceed(String userAccount) {
-//		helper.sendMessageAsServer(new Message.messageBuilder<String>().Code(Message.M_IMAGE_UPDATE_SUCCEED)
-//				.Receiver(userAccount).build());
-//	}
+	// public void sendImageUpdateSucceed(String userAccount) {
+	// helper.sendMessageAsServer(new
+	// Message.messageBuilder<String>().Code(Message.M_IMAGE_UPDATE_SUCCEED)
+	// .Receiver(userAccount).build());
+	// }
 }
