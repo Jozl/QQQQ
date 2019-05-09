@@ -1,6 +1,7 @@
 package com;
 
 import java.awt.image.BufferedImage;
+import java.awt.image.Kernel;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.BufferedWriter;
@@ -21,11 +22,14 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.nio.charset.Charset;
 import java.security.KeyManagementException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
@@ -43,6 +47,7 @@ import java.util.Scanner;
 import java.util.Set;
 
 import javax.imageio.ImageIO;
+import javax.imageio.stream.FileImageInputStream;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLServerSocket;
@@ -50,6 +55,8 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.TrustManagerFactory;
 
 import Client.Client;
+import Client.ClientUI;
+import Server.ServerImage;
 import Server.ServerUI;
 
 public class ConnectionHelper {
@@ -75,9 +82,13 @@ public class ConnectionHelper {
 	public static final int SERVER_PORT_SSL = 50003;
 	public static final int SERVER_PORT_Out = 50004;
 	public static final int SERVER_PORT_In = 50005;
+	private boolean uploadingFlag = false;
 	private static final int portNum = 5;
 	public static final String SERVER = "Server";
 	public static final String PUBLIC = "Public";
+
+	private ServerSocketChannel serverSocketChannel;
+	private Selector selector;
 
 	public ConnectionHelper(boolean isServer) throws SocketException {
 		this();
@@ -89,6 +100,24 @@ public class ConnectionHelper {
 		portInTCP = isServer ? SERVER_PORT_In : ports[4];
 		datagramSocketSend = new DatagramSocket(portSendUDP);
 		datagramSocketRecv = new DatagramSocket(portRecvUDP);
+
+		if (portInTCP == SERVER_PORT_In) {
+			try {
+				serverSocketChannel = ServerSocketChannel.open();
+				selector = Selector.open();
+				serverSocketChannel.configureBlocking(false);
+				System.out.println("非阻塞");
+				ServerSocket serverSocket = serverSocketChannel.socket();
+				serverSocket.setReuseAddress(true);
+				serverSocket.bind(new InetSocketAddress(portInTCP));
+				serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
+				System.out.println("图片服务器启动");
+			} catch (ClosedChannelException e) {
+				e.printStackTrace();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
 	}
 
 	public int[] findValidPorts() {
@@ -307,6 +336,337 @@ public class ConnectionHelper {
 		return waitMessage(0, false);
 	}
 
+	public void waitingImageRequests() {
+		new Thread(new Runnable() {
+
+			@Override
+			public void run() {
+				try {
+					while (selector.select() > 0) {
+						Set<SelectionKey> selectedKeys = selector.selectedKeys();
+						Iterator<SelectionKey> iterator = selectedKeys.iterator();
+						while (iterator.hasNext()) {
+							SelectionKey key = null;
+							try {
+								key = (SelectionKey) iterator.next();
+								iterator.remove();
+								if (key.isAcceptable()) {
+									SocketChannel socketChannel = serverSocketChannel.accept();
+									socketChannel.configureBlocking(false);
+									System.out.println("接收到来自 ：" + socketChannel.getRemoteAddress() + "的连接");
+									socketChannel.register(selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE);
+								}
+								if (key.isReadable()) {
+									SocketChannel socketChannel = (SocketChannel) key.channel();
+									ByteBuffer byteBuffer = ByteBuffer.allocate(1024);
+									socketChannel.read(byteBuffer);
+									byteBuffer.flip();
+									String imageCtrlStr = Charset.forName("UTF-8").newDecoder().decode(byteBuffer)
+											.toString();
+									byteBuffer.clear();
+									System.out.println(imageCtrlStr);
+
+									if (imageCtrlStr.startsWith("request")) {
+										while (uploadingFlag)
+											;
+										File image = new File("./src/Server/HeadImages/"
+												+ imageCtrlStr.replace("request", "") + ".jpg");
+										if (!image.isFile() || image.length() == 0) {
+											image = new File("./src/Server/HeadImages/Default.jpg");
+										}
+
+										System.out.println(image.getName());
+										key.attach(new ServerImage(image, true));
+									}
+									if (imageCtrlStr.startsWith("upload")) {
+										String userAccount = imageCtrlStr.replace("upload", "");
+										uploadingFlag = true;
+										File image = new File("./src/Server/HeadImages/" + userAccount + ".jpg");
+										ServerImage serverImage = new ServerImage(image, false);
+										FileOutputStream fileOut = new FileOutputStream(serverImage.getFile());
+										byte[] buffer = new byte[1024];
+										int n = 0;
+										while (buffer.length == 1024) {
+											socketChannel.read(byteBuffer);
+											byteBuffer.flip();
+											buffer = new byte[byteBuffer.remaining()];
+											byteBuffer.get(buffer, 0, buffer.length);
+											fileOut.write(buffer, 0, buffer.length);
+											byteBuffer.clear();
+										}
+										fileOut.close();
+										uploadingFlag = false;
+										sendMessageToAllConnections(new Message.messageBuilder<String>()
+												.Code(Message.M_IMAGE_UPDATE).Payload(userAccount).build());
+										// key.cancel();
+									}
+								}
+								if (key.isWritable()) {
+									if (key.attachment() == null)
+										break;
+
+									ServerImage serverImage = (ServerImage) key.attachment();
+
+									if (serverImage.isReading()) {
+										SocketChannel socketChannel = (SocketChannel) key.channel();
+										FileInputStream fileIn = new FileInputStream(serverImage.getFile());
+										ByteBuffer byteBuffer = ByteBuffer.allocate(1024);
+										byte[] buffer = new byte[1024];
+										int n = 0;
+										socketChannel.write(ByteBuffer.wrap("start!\r\n".getBytes()));
+										while ((n = fileIn.read(buffer)) != -1) {
+											socketChannel.write(ByteBuffer.wrap(buffer, 0, n));
+										}
+										socketChannel.write(ByteBuffer.wrap("保险".getBytes()));
+
+										key.cancel();
+									}
+								}
+							} catch (IOException e) {
+								e.printStackTrace();
+								try {
+									if (key != null) {
+										key.cancel();
+										key.channel().close();
+									}
+								} catch (IOException e1) {
+									e1.printStackTrace();
+								}
+							}
+						}
+					}
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		}).start();
+
+	}
+
+	// public void imageRequests(List<String> requests, Client caller) {
+	// for (String requestImageName : requests) {
+	// new Thread(new Runnable() {
+	//
+	// @Override
+	// public void run() {
+	// imageRequest(requestImageName);
+	// caller.updateHeadImage(requestImageName);
+	// }
+	// // **************************
+	// }).start();
+	// }
+	// }
+
+	public void imageRequest(String requestImageName, Client caller) {
+		try {
+			Socket socket = new Socket(getConnectionAddress(SERVER).getAddress(), SERVER_PORT_In);
+
+			BufferedOutputStream fileOut = new BufferedOutputStream(
+					new FileOutputStream(new File("./src/Client/HeadImages/" + requestImageName + ".jpg")));
+
+			BufferedOutputStream out = new BufferedOutputStream(socket.getOutputStream());
+			BufferedInputStream in = new BufferedInputStream(socket.getInputStream());
+			Scanner scanner = new Scanner(in);
+
+			byte[] buffer = new byte[1024];
+			out.write(("request" + requestImageName).getBytes());
+			out.flush();
+			System.out.println("发了request字符串");
+
+			boolean waiting = true;
+			while (waiting) {
+				waiting = !scanner.nextLine().startsWith("start!");
+			}
+			System.out.println("start");
+			int n = 1024;
+			while (n == 1024) {
+				n = in.read(buffer);
+				fileOut.write(buffer, 0, n);
+			}
+			System.out.println("end");
+			scanner.close();
+			out.close();
+			fileOut.close();
+			socket.close();
+			caller.updateHeadImage(requestImageName);
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	public void imageUpload(String uploadImageName) {
+		try {
+			Socket socket = new Socket(getConnectionAddress(SERVER).getAddress(), SERVER_PORT_In);
+			System.out.println("upload" + uploadImageName);
+
+			BufferedInputStream fileIn = new BufferedInputStream(
+					new FileInputStream(new File("./src/Client/HeadImages/" + uploadImageName + ".jpg")));
+
+			BufferedOutputStream out = new BufferedOutputStream(socket.getOutputStream());
+			BufferedInputStream in = new BufferedInputStream(socket.getInputStream());
+			Scanner scanner = new Scanner(in);
+
+			System.out.println("发了upload字符串");
+
+			// boolean waiting = true;
+			// while (waiting) {
+			// waiting = !scanner.nextLine().startsWith("start!");
+			// }
+			int n = 0;
+			byte[] buffer = new byte[1024];
+			out.write(("upload" + uploadImageName).getBytes());
+			out.flush();
+			while ((n = fileIn.read(buffer)) != -1) {
+				out.write(buffer, 0, n);
+				out.flush();
+			}
+			scanner.close();
+			out.close();
+			fileIn.close();
+			socket.close();
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	// public void sendImage(Message<?> message) {
+	// InetSocketAddress remoteAddr = getConnectionAddress(message.getSender());
+	// try {
+	// Socket socket = new Socket(remoteAddr.getAddress(),
+	// getTcpRecvPortFromUdpRecvPort(getUdpRecvPortFromUdpSendPort(remoteAddr.getPort())));
+	// try {
+	// for (String userAccount : (List<String>) message.getPayload()) {
+	// System.out.println("now server" + userAccount);
+	// sendImage(socket, remoteAddr, userAccount);
+	// }
+	// System.out.println("for loop end");
+	// } catch (ClassCastException e) {
+	// e.printStackTrace();
+	// sendImage(socket, remoteAddr, (String) message.getPayload());
+	// }
+	// socket.close();
+	// } catch (IOException e1) {
+	// e1.printStackTrace();
+	// }
+	// }
+
+	// private void sendImage(Socket socket, InetSocketAddress remoteAddr, String
+	// imageName) {
+	// System.out.println("写");
+	// File image = new File("./src/Server/HeadImages/" + imageName + ".jpg");
+	// if (!image.isFile()) {
+	// image = new File("./src/Server/HeadImages/Default.jpg");
+	// }
+	//
+	// System.out.println(image.getName());
+	// try {
+	// BufferedOutputStream out = new
+	// BufferedOutputStream(socket.getOutputStream());
+	// BufferedInputStream in = new BufferedInputStream(socket.getInputStream());
+	// BufferedInputStream fin = new BufferedInputStream(new
+	// FileInputStream(image));
+	//
+	// out.write(7);
+	// int b=-1;
+	// while ((b=in.read()) != 8)
+	// System.out.println(b);
+	// ;
+	//
+	// while (uploadingFlag)
+	// ;
+	//
+	// byte[] buffer = new byte[1024];
+	// int n = 0;
+	// while ((n = fin.read(buffer)) != -1) {
+	// out.write(buffer, 0, n);
+	// }
+	// in.close();
+	// } catch (FileNotFoundException e) {
+	// e.printStackTrace();
+	// } catch (IOException e) {
+	// e.printStackTrace();
+	// }
+	//
+	// System.out.println("写完");
+	// }
+
+	// public void waitImages(List<String> imageList, Client caller, int num) {
+	// new Thread(new Runnable() {
+	//
+	// @Override
+	// public void run() {
+	// try (ServerSocket serverSocket = new ServerSocket(getPortInTCP());) {
+	// Socket socket = serverSocket.accept();
+	// for (String account : imageList) {
+	// fetchImage(socket, account);
+	// }
+	// caller.updateHeadImages();
+	// socket.close();
+	// } catch (IOException e) {
+	// e.printStackTrace();
+	// }
+	// }
+	// }).start();
+	// }
+	//
+	// public void waitImage(String account, Client caller) {
+	// try (ServerSocket serverSocket = new ServerSocket(getPortInTCP());) {
+	// Socket socket = serverSocket.accept();
+	// fetchImage(socket, account).close();
+	// caller.updateHeadImages();
+	// } catch (IOException e) {
+	// e.printStackTrace();
+	// }
+	// }
+	//
+	// private BufferedInputStream fetchImage(Socket socket, String imageName) {
+	// System.out.println("fetch" + imageName);
+	// File image = new File("./src/Client/HeadImages/" + imageName + ".jpg");
+	//
+	// try {
+	// FileOutputStream fout = new FileOutputStream(image);
+	// BufferedOutputStream out = new
+	// BufferedOutputStream(socket.getOutputStream());
+	// BufferedInputStream in = new BufferedInputStream(socket.getInputStream());
+	//
+	// int b = -1;
+	// while ((b = in.read() )!= 7)
+	// System.out.println(b);
+	// ;
+	// out.write(8);
+	//
+	// byte[] buffer = new byte[1024];
+	// int n = 0;
+	// while ((n = in.read(buffer)) != -1) {
+	// fout.write(buffer, 0, n);
+	// }
+	// fout.close();
+	//
+	// return in;
+	// } catch (FileNotFoundException e) {
+	// e.printStackTrace();
+	// } catch (IOException e) {
+	// e.printStackTrace();
+	// }
+	// return null;
+	// }
+
+	private int getTcpRecvPortFromUdpRecvPort(int p) {
+		return p + 3;
+	}
+
+	private int getTcpSendPortFromUdpRecvPort(int p) {
+		return p + 2;
+	}
+
+	private int getUdpRecvPortFromUdpSendPort(int p) {
+		return p + 1;
+	}
+
 	private boolean check(String target) {
 		return targetList.contains(target);
 	}
@@ -322,156 +682,61 @@ public class ConnectionHelper {
 	public void shut() {
 	}
 
-	public void sendImage(Message<?> message) {
-		@SuppressWarnings("unchecked")
-		List<String> imageList = (List<String>) message.getPayload();
-
-		InetSocketAddress remoteAddr = getConnectionAddress(message.getSender());
-		for (String userAccount : imageList) {
-			try (Socket socket = new Socket(remoteAddr.getAddress(),
-					getTcpRecvPortFromUdpRecvPort(getUdpRecvPortFromUdpSendPort(remoteAddr.getPort())))) {
-
-				BufferedOutputStream out = new BufferedOutputStream(socket.getOutputStream());
-				FileOutputStream fileOut = null;
-
-				File image = new File("./src/Server/HeadImages/" + userAccount + ".jpg");
-				if (!image.isFile()) {
-					image = new File("./src/Server/HeadImages/Default.jpg");
-				}
-				BufferedInputStream in = new BufferedInputStream(new FileInputStream(image));
-
-				byte[] buffer = new byte[1024];
-				int n = 0;
-				while ((n = in.read(buffer)) != -1) {
-					out.write(buffer, 0, n);
-					if (fileOut != null)
-						fileOut.write(buffer, 0, n);
-				}
-				in.close();
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-		}
-
-	}
-
-	// public void waitImageUpdate(List<String> imageList, Object user, String
-	// sender) {
-	// System.out.println("等客户端 发图片");
-	// waitImage(imageList, user, false, sender);
+	// public void sendHeadImage(File image, String selfAccount) {
+	// System.out.println("c 开始发");
+	//
+	// InetSocketAddress remoteAddr = getConnectionAddress(SERVER);
+	// try (Socket socket = new Socket(remoteAddr.getAddress(),
+	// getTcpRecvPortFromUdpRecvPort(getUdpRecvPortFromUdpSendPort(remoteAddr.getPort()))))
+	// {
+	//
+	// File imageLocal = new File("./src/Client/HeadImages/" + selfAccount +
+	// ".jpg");
+	//
+	// BufferedOutputStream out = new
+	// BufferedOutputStream(socket.getOutputStream());
+	// BufferedOutputStream localOut = new BufferedOutputStream(new
+	// FileOutputStream(imageLocal));
+	// BufferedInputStream in = new BufferedInputStream(new FileInputStream(image));
+	//
+	// byte[] buffer = new byte[1024];
+	// int n = 0;
+	// while ((n = in.read(buffer)) != -1) {
+	// out.write(buffer, 0, n);
+	// localOut.write(buffer, 0, n);
 	// }
 	//
-	// public void waitImage(List<String> imageList, Object user) {
-	// waitImage(imageList, user, true, null);
+	// localOut.close();
+	// out.close();
+	// in.close();
+	// } catch (IOException e) {
+	// e.printStackTrace();
 	// }
-
-	public void waitImage(List<String> imageList, Client caller) {
-		new Thread(new Runnable() {
-
-			@Override
-			public void run() {
-				try (ServerSocket serverSocket = new ServerSocket(getPortInTCP());) {
-					for (String userAccount : imageList) {
-						Socket socket = serverSocket.accept();
-						System.out.println("获取连接");
-
-						BufferedInputStream in = new BufferedInputStream(socket.getInputStream());
-
-						File image = new File("./src/Client/HeadImages/" + userAccount + ".jpg");
-						FileOutputStream out = new FileOutputStream(image);
-
-						byte[] buffer = new byte[1024];
-						int n = 0;
-						while ((n = in.read(buffer)) != -1) {
-							out.write(buffer, 0, n);
-						}
-						out.close();
-						socket.close();
-					}
-					System.out.println("dialog END");
-					caller.updateHeadImages();
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
-		}).start();
-		// sendMessageToServer(message);(
-		// new
-		// Message.messageBuilder().Code(Message.M_IMAGE_REQUEST).Sender(userAccount).build());
-	}
-
-	private int getTcpRecvPortFromUdpRecvPort(int p) {
-		return p + 3;
-	}
-
-	private int getTcpSendPortFromUdpRecvPort(int p) {
-		return p + 2;
-	}
-
-	private int getUdpRecvPortFromUdpSendPort(int p) {
-		return p + 1;
-	}
-
-	// public void sendImageUpdate(File image) {
-	// new Thread(new Runnable() {
+	// }
 	//
-	// @Override
-	// public void run() {
+	// public void waitHeadImage(String sender, ServerUI caller) {
+	// System.out.println("s 开始等");
 	// try (ServerSocket serverSocket = new ServerSocket(getPortInTCP());) {
 	// Socket socket = serverSocket.accept();
-	// System.out.println("获取连接");
 	//
-	// BufferedInputStream in = new BufferedInputStream(socket.getInputStream());
+	// File image = new File("./src/Server/HeadImages/" + sender + ".jpg");
 	//
 	// FileOutputStream out = new FileOutputStream(image);
+	// BufferedInputStream in = new BufferedInputStream(socket.getInputStream());
 	//
+	// uploadingFlag = true;
 	// byte[] buffer = new byte[1024];
 	// int n = 0;
 	// while ((n = in.read(buffer)) != -1) {
 	// out.write(buffer, 0, n);
 	// }
 	// out.close();
-	//
+	// in.close();
 	// socket.close();
-	// System.out.println("update END");
+	// uploadingFlag = false;
+	// caller.sendUpdateSucceed(sender);
 	// } catch (IOException e) {
 	// e.printStackTrace();
 	// }
-	// }
-	// }).start();
-	// }
-	//
-	// public void waitImageUpdate(String sender, ServerUI serverUI) {
-	// new Thread(new Runnable() {
-	//
-	// @Override
-	// public void run() {
-	// try (ServerSocket serverSocket = new ServerSocket(getPortInTCP());) {
-	// Socket socket = serverSocket.accept();
-	// System.out.println("获取连接");
-	//
-	// BufferedInputStream in = new BufferedInputStream(socket.getInputStream());
-	//
-	// File image = new File("./src/Client/HeadImages/" + sender + ".jpg");
-	// FileOutputStream out = new FileOutputStream(image);
-	//
-	// byte[] buffer = new byte[1024];
-	// int n = 0;
-	// while ((n = in.read(buffer)) != -1) {
-	// out.write(buffer, 0, n);
-	// }
-	// out.close();
-	//
-	// System.out.println("get" + sender);
-	//
-	// socket.close();
-	// System.out.println("dialog END");
-	// } catch (IOException e) {
-	// e.printStackTrace();
-	// }
-	// }
-	// }).start();
-	//
-	// // serverUI.sendImageUpdateSucceed(sender);
 	// }
 }

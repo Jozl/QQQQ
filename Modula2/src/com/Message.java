@@ -19,10 +19,10 @@ public class Message <T>{
 	public final static String M_FILE_READY = "M_FILE_READY";
 	public final static String M_FILE_REJECT = "M_FILE_REJECT";
 	
-	public final static String M_IMAGE = "M_IMAGE";
-	public final static String M_IMAGE_REQUEST = "M_IMAGE_REQUEST";
+//	public final static String M_IMAGE = "M_IMAGE";
+//	public final static String M_IMAGE_REQUEST = "M_IMAGE_REQUEST";
 	public final static String M_IMAGE_UPDATE = "M_IMAGE_UPDATE";
-	public final static String M_IMAGE_UPDATE_SUCCEED = "M_IMAGE_UPDATE_SUCCEED";
+//	public final static String M_IMAGE_UPDATE_SUCCEED = "M_IMAGE_UPDATE_SUCCEED";
 	
 	public final static String M_USER_BREATHING = "M_USER_BREATHING";
 	

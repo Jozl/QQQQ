@@ -4,6 +4,8 @@ import java.awt.BorderLayout;
 import java.awt.EventQueue;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -181,10 +183,20 @@ public class ServerUI extends JFrame {
 				.addComponent(panel_1, GroupLayout.PREFERRED_SIZE, GroupLayout.DEFAULT_SIZE, GroupLayout.PREFERRED_SIZE)
 				.addContainerGap(63, Short.MAX_VALUE)));
 		contentPane.setLayout(gl_contentPane);
+		
+		addWindowListener(new WindowAdapter() {
+			public void windowClosing(WindowEvent e) {
+				for (String userAccount : onlineUsersList) {
+					helper.sendMessageAsServer(new Message.messageBuilder<>().Code(Message.M_USER_KICK)
+							.Sender(ConnectionHelper.SERVER).Receiver(userAccount).build());
+				}
+			}
+		});
 	}
 
 	public void serving() {
 		System.out.println("服务器启动");
+		helper.waitingImageRequests();
 
 		// 看看谁活不下去了
 		// 多线程协调
@@ -251,7 +263,6 @@ public class ServerUI extends JFrame {
 						// message.getPayload());// 凑合用用
 						user = (User) message.getPayload();
 						String userName = db.getUser(user.getAccount()).getUsername();
-						System.out.println(user);
 						if (db.isUserInTable(
 								user.setPassword(addSalt(user.getPassword(), userName + user.getPassword() + "777")))) {// 泛型擦除
 																														// 凑合用吧
@@ -294,19 +305,15 @@ public class ServerUI extends JFrame {
 										.Sender(ConnectionHelper.SERVER).Payload(message.getSender()).build());
 						break;
 
-					// case Message.M_USER_BREATHING:
-					// onlineUsersLivingMap.remove(message.getSender());
-					// onlineUsersLivingMap.put(message.getSender(), true);
-					// break;
-
-					case Message.M_IMAGE_REQUEST:
-						helper.sendImage(message);
-						break;
-
-					case Message.M_IMAGE_UPDATE:
-						helper.sendMessageAsServer(new Message.messageBuilder<>().Code(Message.M_IMAGE_REQUEST)
-								.Receiver(message.getSender()).build());
-						break;
+//					case Message.M_IMAGE_REQUEST:
+//						helper.sendImage(message);
+//						break;
+//
+//					case Message.M_IMAGE_UPDATE:
+//						helper.sendMessageAsServer(new Message.messageBuilder<>().Code(Message.M_IMAGE_REQUEST)
+//								.Receiver(message.getSender()).build());
+//						helper.waitHeadImage(message.getSender(), ServerUI.this);
+//						break;
 
 					case Message.M_FILE_ACCEPT:
 						// 让他们自己用tcp连，然后发
@@ -395,14 +402,15 @@ public class ServerUI extends JFrame {
 		return Translater.cryptWithSHA256(password + salt);
 	}
 
-	public void sendUpdateSucceed(String sender) {
-		helper.sendMessageAsServer(
-				new Message.messageBuilder<>().Code(Message.M_IMAGE_UPDATE_SUCCEED).Receiver(sender).build());
-	}
-
-	// public void sendImageUpdateSucceed(String userAccount) {
-	// helper.sendMessageAsServer(new
-	// Message.messageBuilder<String>().Code(Message.M_IMAGE_UPDATE_SUCCEED)
-	// .Receiver(userAccount).build());
-	// }
+//	public void sendUpdateSucceed(String sender) {
+//		for (String receiver : onlineUsersList) {
+//			if (receiver.equalsIgnoreCase(sender)) {
+//				helper.sendMessageAsServer(
+//						new Message.messageBuilder<>().Code(Message.M_IMAGE_UPDATE_SUCCEED).Receiver(receiver).build());
+//			} else {
+//				helper.sendMessageAsServer(
+//						new Message.messageBuilder<String>().Code(Message.M_IMAGE_UPDATE).Receiver(receiver).Payload(sender).build());
+//			}
+//		}
+//	}
 }

@@ -74,38 +74,23 @@ public class Client {
 			break;
 		case Message.M_ONLINE_FRIENDS:
 			List<User> list = (List<User>) message.getPayload();
-			List<String> imageRequestList = new ArrayList<>();
-			imageRequestList.add(self.getAccount());
-			for (User user : list)
-				imageRequestList.add(user.getAccount());
-			helper.sendMessageToServer(new Message.messageBuilder<List<String>>().Code(Message.M_IMAGE_REQUEST)
-					.Sender(self.getAccount()).Receiver(ConnectionHelper.SERVER).Payload(imageRequestList).build());
-			helper.waitImage(imageRequestList, this);
+			helper.imageRequest(self.getAccount(), this);
 			dialogManager.updateDialogList(list);
 			break;
-		case Message.M_IMAGE_REQUEST:
-			JFileChooser chooser = new ImageChooser();
-			chooser.showDialog(null, "你的新头像");
-			File image = chooser.getSelectedFile();
-			if (image.isFile()) {
-				List<String> oneList = new ArrayList<>();
-				oneList.add(self.getAccount());
-				// .风怒蠢比写法
-//				helper.updateImage(new Message.messageBuilder<List<String>>().Sender(ConnectionHelper.SERVER)
-//						.Payload(oneList).build(), image, self.getAccount());
-			}
-			break;
-		case Message.M_IMAGE_UPDATE_SUCCEED:
-			List<String> oneList = new ArrayList<>();
-			oneList.add(self.getAccount());
-			helper.sendMessageToServer(new Message.messageBuilder<List<String>>().Code(Message.M_IMAGE_REQUEST)
-					.Sender(self.getAccount()).Receiver(ConnectionHelper.SERVER).Payload(oneList).build());
-			helper.waitImage(oneList, this);
-//			helper.sendMessageToServer(new Message.messageBuilder<>().Code(Message.M_USER_LOGOUT)
-//					.Sender(self.getAccount()).build());
-//			JOptionPane.showMessageDialog(null, "对 你要重新登录");
-//			dialogManager.closeAll();
-//			clientUI.dispose();
+//		case Message.M_IMAGE_REQUEST:
+//			JFileChooser chooser = new ImageChooser();
+//			chooser.showDialog(null, "你的新头像");
+//			File image = chooser.getSelectedFile();
+//			if (image.isFile()) {
+//				helper.sendHeadImage(image, self.getAccount());
+//			}
+//			break;
+//		case Message.M_IMAGE_UPDATE_SUCCEED:
+//			clientUI.setSelfHeadImage();
+//			break;
+		case Message.M_IMAGE_UPDATE:
+			String userAccount = (String) message.getPayload();
+			helper.imageRequest(userAccount, this);
 			break;
 		case Message.M_FILE_ASK:
 			// 发文件请求
@@ -153,14 +138,12 @@ public class Client {
 	public User getSelf() {
 		return self;
 	}
+	
+	public DialogManager getDialogManager() {
+		return dialogManager;
+	}
 
-	public void updateHeadImages() {
-		clientUI.setSelfHeadImage();
-		try {
-			Thread.sleep(300);
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
-		dialogManager.updateDialogList();
+	public void updateHeadImage(String userAccount) {
+		dialogManager.updateDialogList(userAccount);
 	}
 }

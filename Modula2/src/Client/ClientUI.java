@@ -58,7 +58,7 @@ public class ClientUI extends JFrame {
 		contentPane.add(panelSelf, BorderLayout.NORTH);
 		panelSelf.setLayout(new BoxLayout(panelSelf, BoxLayout.Y_AXIS));
 
-		selfTab = new UserTabUI(ClientUI.this, self, true, UserTabUI.class.getResource("/img/LoginBG.JPG"));
+		selfTab = new UserTabUI(ClientUI.this, self, true);
 		selfTab.setAlignmentX(LEFT_ALIGNMENT);
 		panelSelf.add(selfTab);
 		panelSelf.revalidate();
@@ -85,7 +85,7 @@ public class ClientUI extends JFrame {
 						.Sender(client.getSelf().getAccount()).build());
 				client.shut();
 				dialogManager.closeAll();
-				userInfo.dispose();
+				userInfo.dispose(); 
 				dispose();
 			}
 		});

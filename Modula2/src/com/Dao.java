@@ -61,7 +61,7 @@ public class Dao {
 			preparedStatement.setString(1, account);
 			ResultSet resultSet = preparedStatement.executeQuery();
 			while (resultSet.next())
-				results.add(new User(resultSet));
+				results.add(new User(resultSet).withdrawPassword());
 
 			return results;
 		} catch (SQLException e) {
